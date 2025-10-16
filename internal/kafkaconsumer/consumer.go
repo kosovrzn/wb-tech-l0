@@ -11,6 +11,7 @@ import (
 	"github.com/kosovrzn/wb-tech-l0/internal/cache"
 	"github.com/kosovrzn/wb-tech-l0/internal/domain"
 	"github.com/kosovrzn/wb-tech-l0/internal/repo"
+	"github.com/kosovrzn/wb-tech-l0/internal/validation"
 
 	"github.com/segmentio/kafka-go"
 )
@@ -31,6 +32,8 @@ func Run(ctx context.Context, brokers, topic, group string, r repo.Repository, c
 
 	defer reader.Close()
 
+	orderValidator := validation.New()
+
 	for {
 		m, err := reader.FetchMessage(ctx)
 		if err != nil {
@@ -41,13 +44,17 @@ func Run(ctx context.Context, brokers, topic, group string, r repo.Repository, c
 		}
 
 		var o domain.Order
-		if err := json.Unmarshal(m.Value, &o); err != nil || o.OrderUID == "" {
+		if err := json.Unmarshal(m.Value, &o); err != nil {
 			log.Printf("skip invalid msg: %v", err)
 			_ = reader.CommitMessages(ctx, m)
 			continue
 		}
-		if len(o.Items) == 0 || o.Delivery.Name == "" || o.Payment.Transaction == "" {
-			log.Printf("skip semantically invalid msg: order_uid=%s", o.OrderUID)
+		if err := orderValidator.ValidateOrder(&o); err != nil {
+			oid := o.OrderUID
+			if oid == "" {
+				oid = "<unknown>"
+			}
+			log.Printf("skip semantically invalid msg: order_uid=%s err=%v", oid, err)
 			_ = reader.CommitMessages(ctx, m)
 			continue
 		}
