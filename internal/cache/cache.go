@@ -1,25 +1,80 @@
 package cache
 
-import "sync"
+import (
+	"container/list"
+	"sync"
+)
 
-type Cache struct {
-	mu sync.RWMutex
-	m  map[string][]byte
+type entry struct {
+	key   string
+	value []byte
 }
 
-func New() *Cache { return &Cache{m: make(map[string][]byte)} }
+type Cache struct {
+	mu    sync.Mutex
+	items map[string]*list.Element
+	order *list.List
+	limit int
+}
+
+func New(limit int) *Cache {
+	if limit <= 0 {
+		limit = 1000
+	}
+	return &Cache{
+		items: make(map[string]*list.Element, limit),
+		order: list.New(),
+		limit: limit,
+	}
+}
 
 func (c *Cache) Get(id string) ([]byte, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	v, ok := c.m[id]
-	return v, ok
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	elem, ok := c.items[id]
+	if !ok {
+		return nil, false
+	}
+	c.order.MoveToFront(elem)
+	ent := elem.Value.(*entry)
+	return ent.value, true
 }
 
 func (c *Cache) Set(id string, b []byte) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if elem, ok := c.items[id]; ok {
+		c.order.MoveToFront(elem)
+		buf := make([]byte, len(b))
+		copy(buf, b)
+		elem.Value.(*entry).value = buf
+		return
+	}
+
 	buf := make([]byte, len(b))
 	copy(buf, b)
-	c.m[id] = buf
-	c.mu.Unlock()
+	elem := c.order.PushFront(&entry{key: id, value: buf})
+	c.items[id] = elem
+
+	if len(c.items) > c.limit {
+		c.evict()
+	}
+}
+
+func (c *Cache) evict() {
+	tail := c.order.Back()
+	if tail == nil {
+		return
+	}
+	ent := tail.Value.(*entry)
+	delete(c.items, ent.key)
+	c.order.Remove(tail)
+}
+
+func (c *Cache) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.items)
 }

@@ -36,8 +36,8 @@ func redactDSN(dsn string) string {
 func main() {
 	cfg := loadCfg()
 
-	log.Printf("config: PG_DSN=%s KAFKA_BROKERS=%s KAFKA_TOPIC=%s KAFKA_GROUP=%s HTTP_ADDR=%s",
-		redactDSN(cfg.PG_DSN), cfg.KafkaBrokers, cfg.KafkaTopic, cfg.KafkaGroup, cfg.HTTPAddr)
+	log.Printf("config: PG_DSN=%s KAFKA_BROKERS=%s KAFKA_TOPIC=%s KAFKA_GROUP=%s HTTP_ADDR=%s CACHE_CAPACITY=%d",
+		redactDSN(cfg.PG_DSN), cfg.KafkaBrokers, cfg.KafkaTopic, cfg.KafkaGroup, cfg.HTTPAddr, cfg.CacheCapacity)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -50,7 +50,7 @@ func main() {
 
 	r := repo.NewPostgres(pool)
 
-	c := cache.New()
+	c := cache.New(cfg.CacheCapacity)
 	if cfg.WarmupLimit > 0 {
 		rows, err := r.Warmup(ctx, cfg.WarmupLimit)
 		if err != nil {
@@ -92,22 +92,24 @@ func main() {
 }
 
 type Cfg struct {
-	PG_DSN       string
-	KafkaBrokers string
-	KafkaTopic   string
-	KafkaGroup   string
-	HTTPAddr     string
-	WarmupLimit  int
+	PG_DSN        string
+	KafkaBrokers  string
+	KafkaTopic    string
+	KafkaGroup    string
+	HTTPAddr      string
+	WarmupLimit   int
+	CacheCapacity int
 }
 
 func loadCfg() Cfg {
 	return Cfg{
-		PG_DSN:       getenv("PG_DSN", "postgres://user:pass@localhost:5432/orders?sslmode=disable"),
-		KafkaBrokers: getenv("KAFKA_BROKERS", "localhost:9092"),
-		KafkaTopic:   getenv("KAFKA_TOPIC", "orders"),
-		KafkaGroup:   getenv("KAFKA_GROUP", "ordersvc"),
-		HTTPAddr:     getenv("HTTP_ADDR", ":8081"),
-		WarmupLimit:  getenvInt("WARMUP_LIMIT", 1000),
+		PG_DSN:        getenv("PG_DSN", "postgres://user:pass@localhost:5432/orders?sslmode=disable"),
+		KafkaBrokers:  getenv("KAFKA_BROKERS", "localhost:9092"),
+		KafkaTopic:    getenv("KAFKA_TOPIC", "orders"),
+		KafkaGroup:    getenv("KAFKA_GROUP", "ordersvc"),
+		HTTPAddr:      getenv("HTTP_ADDR", ":8081"),
+		WarmupLimit:   getenvInt("WARMUP_LIMIT", 1000),
+		CacheCapacity: getenvInt("CACHE_CAPACITY", 1000),
 	}
 }
 
