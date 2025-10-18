@@ -15,6 +15,7 @@ import (
 	"github.com/kosovrzn/wb-tech-l0/internal/cache"
 	"github.com/kosovrzn/wb-tech-l0/internal/httpapi"
 	"github.com/kosovrzn/wb-tech-l0/internal/kafkaconsumer"
+	"github.com/kosovrzn/wb-tech-l0/internal/migrate"
 	"github.com/kosovrzn/wb-tech-l0/internal/repo"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,8 +37,8 @@ func redactDSN(dsn string) string {
 func main() {
 	cfg := loadCfg()
 
-	log.Printf("config: PG_DSN=%s KAFKA_BROKERS=%s KAFKA_TOPIC=%s KAFKA_GROUP=%s HTTP_ADDR=%s CACHE_CAPACITY=%d",
-		redactDSN(cfg.PG_DSN), cfg.KafkaBrokers, cfg.KafkaTopic, cfg.KafkaGroup, cfg.HTTPAddr, cfg.CacheCapacity)
+	log.Printf("config: PG_DSN=%s KAFKA_BROKERS=%s KAFKA_TOPIC=%s KAFKA_GROUP=%s HTTP_ADDR=%s CACHE_CAPACITY=%d AUTO_MIGRATE=%t",
+		redactDSN(cfg.PG_DSN), cfg.KafkaBrokers, cfg.KafkaTopic, cfg.KafkaGroup, cfg.HTTPAddr, cfg.CacheCapacity, cfg.AutoMigrate)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -47,6 +48,13 @@ func main() {
 		log.Fatal(err)
 	}
 	defer pool.Close()
+
+	if cfg.AutoMigrate {
+		log.Printf("running database migrations")
+		if err := migrate.Up(ctx, cfg.PG_DSN); err != nil {
+			log.Fatalf("migrations failed: %v", err)
+		}
+	}
 
 	r := repo.NewPostgres(pool)
 
@@ -99,6 +107,7 @@ type Cfg struct {
 	HTTPAddr      string
 	WarmupLimit   int
 	CacheCapacity int
+	AutoMigrate   bool
 }
 
 func loadCfg() Cfg {
@@ -110,6 +119,7 @@ func loadCfg() Cfg {
 		HTTPAddr:      getenv("HTTP_ADDR", ":8081"),
 		WarmupLimit:   getenvInt("WARMUP_LIMIT", 1000),
 		CacheCapacity: getenvInt("CACHE_CAPACITY", 1000),
+		AutoMigrate:   getenvBool("AUTO_MIGRATE", false),
 	}
 }
 
@@ -124,6 +134,15 @@ func getenvInt(k string, def int) int {
 	if v := os.Getenv(k); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
+		}
+	}
+	return def
+}
+
+func getenvBool(k string, def bool) bool {
+	if v := os.Getenv(k); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
 		}
 	}
 	return def
