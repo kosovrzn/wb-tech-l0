@@ -8,7 +8,7 @@ import (
 	"github.com/kosovrzn/wb-tech-l0/internal/repo"
 )
 
-func NewHandler(store repo.Repository, c *cache.Cache) http.Handler {
+func NewHandler(store repo.Repository, c cache.Store) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

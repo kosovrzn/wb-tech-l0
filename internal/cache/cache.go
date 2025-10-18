@@ -5,6 +5,14 @@ import (
 	"sync"
 )
 
+//go:generate moq -pkg mocks -out ../mocks/cache_mock.go . Store
+
+// Store describes cache operations used by the service.
+type Store interface {
+	Get(id string) ([]byte, bool)
+	Set(id string, b []byte)
+}
+
 type entry struct {
 	key   string
 	value []byte
@@ -78,3 +86,5 @@ func (c *Cache) Len() int {
 	defer c.mu.Unlock()
 	return len(c.items)
 }
+
+var _ Store = (*Cache)(nil)

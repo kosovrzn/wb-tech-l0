@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE IF NOT EXISTS orders (
     order_uid         text PRIMARY KEY,
     track_number      text NOT NULL,
@@ -58,3 +59,12 @@ CREATE TABLE IF NOT EXISTS items (
 
 CREATE INDEX IF NOT EXISTS idx_items_order_uid ON items(order_uid);
 CREATE INDEX IF NOT EXISTS idx_orders_date_created ON orders(date_created);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_items_order_uid;
+DROP INDEX IF EXISTS idx_orders_date_created;
+
+DROP TABLE IF EXISTS items;
+DROP TABLE IF EXISTS payments;
+DROP TABLE IF EXISTS deliveries;
+DROP TABLE IF EXISTS orders;

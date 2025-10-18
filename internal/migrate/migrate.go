@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pressly/goose/v3"
@@ -109,6 +110,16 @@ func withDB(ctx context.Context, dsn string, fn func(context.Context, *sql.DB) e
 		return fmt.Errorf("ping db: %w", err)
 	}
 
+	if _, err := goose.EnsureDBVersion(db); err != nil {
+		if strings.Contains(err.Error(), "goose_db_version") {
+			if err := createGooseVersionTable(ctx, db); err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("ensure goose version table: %w", err)
+		}
+	}
+
 	return fn(ctx, db)
 }
 
@@ -140,4 +151,23 @@ func ResolveDir(custom string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(wd, path), nil
+}
+
+func createGooseVersionTable(ctx context.Context, db *sql.DB) error {
+	const createTable = `CREATE TABLE IF NOT EXISTS goose_db_version (
+  id SERIAL PRIMARY KEY,
+  version_id BIGINT NOT NULL,
+  is_applied BOOLEAN NOT NULL,
+  tstamp TIMESTAMP NOT NULL DEFAULT now()
+)`
+	if _, err := db.ExecContext(ctx, createTable); err != nil {
+		return fmt.Errorf("create goose version table: %w", err)
+	}
+	const insertRow = `INSERT INTO goose_db_version (version_id, is_applied)
+SELECT 0, TRUE
+WHERE NOT EXISTS (SELECT 1 FROM goose_db_version)`
+	if _, err := db.ExecContext(ctx, insertRow); err != nil {
+		return fmt.Errorf("init goose version table: %w", err)
+	}
+	return nil
 }

@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+//go:generate moq -pkg mocks -out ../mocks/repository_mock.go . Repository
+
 type Repository interface {
 	UpsertOrder(ctx context.Context, o *domain.Order, rawJSON []byte) error
 	GetOrderRaw(ctx context.Context, id string) ([]byte, error)

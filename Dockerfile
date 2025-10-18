@@ -9,11 +9,12 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/storesvc ./cmd/storesvc
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/migrator ./cmd/migrator
 
-FROM gcr.io/distroless/static:nonroot
+FROM debian:12-slim
 WORKDIR /
 COPY --from=build /out/storesvc /storesvc
 COPY --from=build /out/migrator /migrator
 COPY --from=build /src/migrations /migrations
+RUN useradd -r -u 10001 storesvc && chown -R storesvc:storesvc /storesvc /migrator /migrations
 EXPOSE 8081
-USER nonroot:nonroot
+USER storesvc:storesvc
 ENTRYPOINT ["/storesvc"]
